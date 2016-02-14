@@ -1,0 +1,117 @@
+---
+title: "Practical Machine Learning"
+author: "Toan"
+date: "2016¦~2¤ë14¤é"
+output: html_document
+---
+
+1) Loading the necessary library.
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+2) Download the Data
+```{r}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "./data/pml-training.csv"
+testFile  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile)
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile)
+}
+```
+3) Reading the data.
+
+```{r}
+trainRaw <- read.csv("./data/pml-training.csv")
+testRaw <- read.csv("./data/pml-testing.csv")
+dim(trainRaw)
+dim(testRaw)
+```
+Traning data set contains 19622 observations with 160 variables, while testing set contains 20 oberservations with 160 variable.
+4) Cleaning the data.
+First, we will clean the data, get rid of missing, NA data point and varaibles which are not usefull
+```{r}
+sum(complete.cases(trainRaw))
+```
+There are no missing data in the training data set.
+
+```{r}
+trainRaw <- trainRaw[, colSums(is.na(trainRaw)) == 0] 
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0] 
+```
+in the code above, We will remove all the column contains NA value.
+Next, we will remove the variable which are not contributed in explained much accelerometer mearsurements.
+```{r}
+classe <- trainRaw$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainRaw))
+trainRaw <- trainRaw[, !trainRemove]
+trainCleaned <- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testRaw))
+testRaw <- testRaw[, !testRemove]
+testCleaned <- testRaw[, sapply(testRaw, is.numeric)]
+```
+
+```{r}
+dim(trainCleaned)
+dim(testCleaned)
+```
+Now, the Cleaned training data contains 19622 obseration and 53 variables. The Cleaned testing data contains 20 observations and 53 variables.
+5. Slicing the data
+we create training data set and testing data set from trainCleaned. 
+```{r}
+set.seed(22519) # For reproducibile purpose
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+6. Modeling
+We use Regression Tree because the dependence variance is a factor variable. This model is for the purpose of classification. Furthermore, Regression tree automatically choosing the important variable first, it is also robust to hightly correlated variables and outliers in general.
+In this project, we create 5 floder to perform cross-validation.
+```{r}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+```
+then, we estimate the performance of the model.
+```{r}
+predictRf <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)
+```
+
+```{r}
+accuracy <- postResample(predictRf, testData$classe)
+accuracy
+oose <- 1 - as.numeric(confusionMatrix(testData$classe, predictRf)$overall[1])
+oose
+```
+The estimate accuracy of the model is 99.32% , the out of sample error is 0.68%
+7. Predicting for test data set.
+  
+```{r}
+result <- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result
+```
+8. Figures.
+Figure1. Correlation Matrix Visualization.
+```{r, echo=TRUE}
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="color")
+```
+Figure2. Decision Tree Visualization.
+```{r, echo=TRUE}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel) # fast plot)
+```
+
